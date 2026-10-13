@@ -11,6 +11,8 @@ public:
     ADD_METHOD_TO(GroupController::updateGroup, "/api/groups/{1}", drogon::Put, "JwtAuthFilter");
     ADD_METHOD_TO(GroupController::getAllGroups, "/api/admin/groups", drogon::Get, "JwtAuthFilter");
     ADD_METHOD_TO(GroupController::getAllGroups, "/api/groups", drogon::Get, "JwtAuthFilter");
+    ADD_METHOD_TO(GroupController::deleteOrLeaveGroup, "/api/groups/{1}", drogon::Delete, "JwtAuthFilter");
+    ADD_METHOD_TO(GroupController::deleteOrLeaveGroup, "/api/groups/{1}/leave", drogon::Post, "JwtAuthFilter");
     ADD_METHOD_TO(GroupController::adminDeleteGroup, "/api/admin/groups/{1}", drogon::Delete, "JwtAuthFilter");
     METHOD_LIST_END
 

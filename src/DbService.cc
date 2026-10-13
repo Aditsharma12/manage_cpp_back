@@ -105,6 +105,15 @@ Json::Value DbService::formatInvite(const drogon::orm::Row& row) {
         }
     }
     i["group_name"] = row["group_name"].isNull() ? "" : row["group_name"].as<std::string>();
+    try {
+        if (!row["sender_name"].isNull()) i["sender_name"] = row["sender_name"].as<std::string>();
+    } catch (...) {}
+    try {
+        if (!row["sender_email"].isNull()) i["sender_email"] = row["sender_email"].as<std::string>();
+    } catch (...) {}
+    try {
+        if (!row["sender_roll"].isNull()) i["sender_roll"] = row["sender_roll"].as<std::string>();
+    } catch (...) {}
 
     return i;
 }

@@ -119,7 +119,11 @@ void InviteController::getPendingInvites(const drogon::HttpRequestPtr& req,
 
     auto dbClient = DbService::getClient();
     dbClient->execSqlAsync(
-        "SELECT * FROM invites WHERE receiver_id = $1 AND status = 'pending' ORDER BY timestamp DESC",
+        "SELECT i.*, u.name AS sender_name, u.email AS sender_email, u.roll_number AS sender_roll "
+        "FROM invites i "
+        "LEFT JOIN users u ON i.sender_id = u.id "
+        "WHERE i.receiver_id = $1 AND i.status = 'pending' "
+        "ORDER BY i.timestamp DESC",
         [callback](const drogon::orm::Result& r) {
             Json::Value list(Json::arrayValue);
             for (const auto& row : r) {
