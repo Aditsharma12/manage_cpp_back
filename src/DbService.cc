@@ -60,6 +60,13 @@ Json::Value DbService::formatGroup(const drogon::orm::Row& row, const std::vecto
     g["creator_id"] = std::to_string(row["creator_id"].as<int>());
     g["max_capacity"] = row["max_capacity"].as<int>();
 
+    try {
+        if (!row["creator_name"].isNull()) g["creator_name"] = row["creator_name"].as<std::string>();
+    } catch (...) {}
+    try {
+        if (!row["creator_email"].isNull()) g["creator_email"] = row["creator_email"].as<std::string>();
+    } catch (...) {}
+
     Json::Value mArr(Json::arrayValue);
     for (const auto& m : memberIds) {
         mArr.append(m);

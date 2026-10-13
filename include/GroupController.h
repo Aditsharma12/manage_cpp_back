@@ -9,7 +9,9 @@ public:
     ADD_METHOD_TO(GroupController::myGroups, "/api/groups/my_groups", drogon::Get, "JwtAuthFilter");
     ADD_METHOD_TO(GroupController::getGroupDetails, "/api/groups/{1}", drogon::Get, "JwtAuthFilter");
     ADD_METHOD_TO(GroupController::updateGroup, "/api/groups/{1}", drogon::Put, "JwtAuthFilter");
-    ADD_METHOD_TO(GroupController::deleteOrLeaveGroup, "/api/groups/{1}", drogon::Delete, "JwtAuthFilter");
+    ADD_METHOD_TO(GroupController::getAllGroups, "/api/admin/groups", drogon::Get, "JwtAuthFilter");
+    ADD_METHOD_TO(GroupController::getAllGroups, "/api/groups", drogon::Get, "JwtAuthFilter");
+    ADD_METHOD_TO(GroupController::adminDeleteGroup, "/api/admin/groups/{1}", drogon::Delete, "JwtAuthFilter");
     METHOD_LIST_END
 
     void createGroup(const drogon::HttpRequestPtr& req,
@@ -17,6 +19,9 @@ public:
 
     void myGroups(const drogon::HttpRequestPtr& req,
                   std::function<void(const drogon::HttpResponsePtr&)>&& callback);
+
+    void getAllGroups(const drogon::HttpRequestPtr& req,
+                      std::function<void(const drogon::HttpResponsePtr&)>&& callback);
 
     void getGroupDetails(const drogon::HttpRequestPtr& req,
                          std::function<void(const drogon::HttpResponsePtr&)>&& callback,
@@ -29,4 +34,8 @@ public:
     void deleteOrLeaveGroup(const drogon::HttpRequestPtr& req,
                             std::function<void(const drogon::HttpResponsePtr&)>&& callback,
                             const std::string& groupId);
+
+    void adminDeleteGroup(const drogon::HttpRequestPtr& req,
+                          std::function<void(const drogon::HttpResponsePtr&)>&& callback,
+                          const std::string& groupId);
 };

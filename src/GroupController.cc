@@ -112,6 +112,104 @@ void GroupController::myGroups(const drogon::HttpRequestPtr& req,
     );
 }
 
+void GroupController::getAllGroups(const drogon::HttpRequestPtr& req,
+                                  std::function<void(const drogon::HttpResponsePtr&)>&& callback) {
+    (void)req;
+    auto dbClient = DbService::getClient();
+    dbClient->execSqlAsync(
+        "SELECT g.*, u.name AS creator_name, u.email AS creator_email "
+        "FROM groups g "
+        "LEFT JOIN users u ON g.creator_id = u.id "
+        "ORDER BY g.id DESC",
+        [callback, dbClient](const drogon::orm::Result& groupsResult) {
+            if (groupsResult.size() == 0) {
+                Json::Value list(Json::arrayValue);
+                auto resp = drogon::HttpResponse::newHttpJsonResponse(list);
+                callback(resp);
+                return;
+            }
+
+            dbClient->execSqlAsync(
+                "SELECT group_id, user_id FROM group_members",
+                [callback, groupsResult](const drogon::orm::Result& gmResult) {
+                    std::map<int, std::vector<std::string>> gmMap;
+                    for (const auto& row : gmResult) {
+                        gmMap[row["group_id"].as<int>()].push_back(std::to_string(row["user_id"].as<int>()));
+                    }
+
+                    Json::Value list(Json::arrayValue);
+                    for (const auto& row : groupsResult) {
+                        int gid = row["id"].as<int>();
+                        list.append(DbService::formatGroup(row, gmMap[gid]));
+                    }
+
+                    auto resp = drogon::HttpResponse::newHttpJsonResponse(list);
+                    callback(resp);
+                },
+                [callback, groupsResult](const drogon::orm::DrogonDbException&) {
+                    Json::Value list(Json::arrayValue);
+                    for (const auto& row : groupsResult) {
+                        list.append(DbService::formatGroup(row));
+                    }
+                    auto resp = drogon::HttpResponse::newHttpJsonResponse(list);
+                    callback(resp);
+                }
+            );
+        },
+        [callback](const drogon::orm::DrogonDbException& e) {
+            Json::Value err;
+            err["error"] = e.base().what();
+            auto resp = drogon::HttpResponse::newHttpJsonResponse(err);
+            resp->setStatusCode(drogon::k500InternalServerError);
+            callback(resp);
+        }
+    );
+}
+
+void GroupController::adminDeleteGroup(const drogon::HttpRequestPtr& req,
+                                       std::function<void(const drogon::HttpResponsePtr&)>&& callback,
+                                       const std::string& groupIdStr) {
+    (void)req;
+    int groupId = 0;
+    try {
+        groupId = std::stoi(groupIdStr);
+    } catch (...) {
+        Json::Value err;
+        err["error"] = "Invalid group ID";
+        auto resp = drogon::HttpResponse::newHttpJsonResponse(err);
+        resp->setStatusCode(drogon::k400BadRequest);
+        callback(resp);
+        return;
+    }
+
+    auto dbClient = DbService::getClient();
+    dbClient->execSqlAsync(
+        "DELETE FROM groups WHERE id = $1 RETURNING id",
+        [callback](const drogon::orm::Result& r) {
+            if (r.size() == 0) {
+                Json::Value err;
+                err["error"] = "Group not found";
+                auto resp = drogon::HttpResponse::newHttpJsonResponse(err);
+                resp->setStatusCode(drogon::k404NotFound);
+                callback(resp);
+                return;
+            }
+            Json::Value res;
+            res["message"] = "Group deleted by Admin";
+            auto resp = drogon::HttpResponse::newHttpJsonResponse(res);
+            callback(resp);
+        },
+        [callback](const drogon::orm::DrogonDbException& e) {
+            Json::Value err;
+            err["error"] = e.base().what();
+            auto resp = drogon::HttpResponse::newHttpJsonResponse(err);
+            resp->setStatusCode(drogon::k500InternalServerError);
+            callback(resp);
+        },
+        groupId
+    );
+}
+
 void GroupController::getGroupDetails(const drogon::HttpRequestPtr& req,
                                       std::function<void(const drogon::HttpResponsePtr&)>&& callback,
                                       const std::string& groupIdStr) {
