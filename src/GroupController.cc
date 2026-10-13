@@ -20,23 +20,52 @@ void GroupController::createGroup(const drogon::HttpRequestPtr& req,
     std::string name = json.get("name", "").asString();
     std::string purpose = json.get("purpose", "").asString();
     std::string section = json.get("section", "General").asString();
+    std::string activityName = json.get("activity_name", "").asString();
     int maxCapacity = json.get("max_capacity", 5).asInt();
 
     auto dbClient = DbService::getClient();
     dbClient->execSqlAsync(
-        "INSERT INTO groups (name, purpose, creator_id, max_capacity, section) VALUES ($1, $2, $3, $4, $5) RETURNING *",
-        [callback, dbClient, currentUserId, currentUserIdStr](const drogon::orm::Result& r) {
-            auto groupRow = r[0];
-            int groupId = groupRow["id"].as<int>();
+        "SELECT role FROM users WHERE id = $1",
+        [callback, dbClient, currentUserId, currentUserIdStr, name, purpose, section, activityName, maxCapacity](const drogon::orm::Result& userR) {
+            bool isAdmin = false;
+            if (userR.size() > 0 && !userR[0]["role"].isNull()) {
+                isAdmin = (userR[0]["role"].as<std::string>() == "admin");
+            }
 
             dbClient->execSqlAsync(
-                "INSERT INTO group_members (group_id, user_id) VALUES ($1, $2)",
-                [callback, groupRow, currentUserIdStr](const drogon::orm::Result&) {
-                    auto resp = drogon::HttpResponse::newHttpJsonResponse(
-                        DbService::formatGroup(groupRow, {currentUserIdStr})
-                    );
-                    resp->setStatusCode(drogon::k201Created);
-                    callback(resp);
+                "INSERT INTO groups (name, purpose, creator_id, max_capacity, section, activity_name) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *",
+                [callback, dbClient, currentUserId, currentUserIdStr, isAdmin](const drogon::orm::Result& r) {
+                    auto groupRow = r[0];
+                    int groupId = groupRow["id"].as<int>();
+
+                    if (isAdmin) {
+                        // Admin is creator/coordinator only, NOT a member of student group
+                        auto resp = drogon::HttpResponse::newHttpJsonResponse(
+                            DbService::formatGroup(groupRow, {})
+                        );
+                        resp->setStatusCode(drogon::k201Created);
+                        callback(resp);
+                    } else {
+                        // Student is enrolled as initial member
+                        dbClient->execSqlAsync(
+                            "INSERT INTO group_members (group_id, user_id) VALUES ($1, $2)",
+                            [callback, groupRow, currentUserIdStr](const drogon::orm::Result&) {
+                                auto resp = drogon::HttpResponse::newHttpJsonResponse(
+                                    DbService::formatGroup(groupRow, {currentUserIdStr})
+                                );
+                                resp->setStatusCode(drogon::k201Created);
+                                callback(resp);
+                            },
+                            [callback](const drogon::orm::DrogonDbException& e) {
+                                Json::Value err;
+                                err["error"] = e.base().what();
+                                auto resp = drogon::HttpResponse::newHttpJsonResponse(err);
+                                resp->setStatusCode(drogon::k500InternalServerError);
+                                callback(resp);
+                            },
+                            groupId, currentUserId
+                        );
+                    }
                 },
                 [callback](const drogon::orm::DrogonDbException& e) {
                     Json::Value err;
@@ -45,7 +74,7 @@ void GroupController::createGroup(const drogon::HttpRequestPtr& req,
                     resp->setStatusCode(drogon::k500InternalServerError);
                     callback(resp);
                 },
-                groupId, currentUserId
+                name, purpose, currentUserId, maxCapacity, section, activityName
             );
         },
         [callback](const drogon::orm::DrogonDbException& e) {
@@ -55,7 +84,7 @@ void GroupController::createGroup(const drogon::HttpRequestPtr& req,
             resp->setStatusCode(drogon::k500InternalServerError);
             callback(resp);
         },
-        name, purpose, currentUserId, maxCapacity, section
+        currentUserId
     );
 }
 
@@ -131,17 +160,31 @@ void GroupController::getAllGroups(const drogon::HttpRequestPtr& req,
             }
 
             dbClient->execSqlAsync(
-                "SELECT group_id, user_id FROM group_members",
+                "SELECT gm.group_id, u.id, u.name, u.roll_number, u.email, u.phone_number "
+                "FROM group_members gm "
+                "JOIN users u ON gm.user_id = u.id",
                 [callback, groupsResult](const drogon::orm::Result& gmResult) {
                     std::map<int, std::vector<std::string>> gmMap;
+                    std::map<int, Json::Value> membersMap;
                     for (const auto& row : gmResult) {
-                        gmMap[row["group_id"].as<int>()].push_back(std::to_string(row["user_id"].as<int>()));
+                        int gid = row["group_id"].as<int>();
+                        gmMap[gid].push_back(std::to_string(row["id"].as<int>()));
+
+                        Json::Value m;
+                        m["id"] = std::to_string(row["id"].as<int>());
+                        m["name"] = row["name"].isNull() ? "" : row["name"].as<std::string>();
+                        m["roll_number"] = row["roll_number"].isNull() ? "" : row["roll_number"].as<std::string>();
+                        m["email"] = row["email"].isNull() ? "" : row["email"].as<std::string>();
+                        m["phone_number"] = row["phone_number"].isNull() ? "" : row["phone_number"].as<std::string>();
+                        membersMap[gid].append(m);
                     }
 
                     Json::Value list(Json::arrayValue);
                     for (const auto& row : groupsResult) {
                         int gid = row["id"].as<int>();
-                        list.append(DbService::formatGroup(row, gmMap[gid]));
+                        Json::Value g = DbService::formatGroup(row, gmMap[gid]);
+                        g["members"] = membersMap.count(gid) ? membersMap[gid] : Json::Value(Json::arrayValue);
+                        list.append(g);
                     }
 
                     auto resp = drogon::HttpResponse::newHttpJsonResponse(list);

@@ -80,6 +80,18 @@ Json::Value DbService::formatGroup(const drogon::orm::Row& row, const std::vecto
     try {
         if (!row["creator_email"].isNull()) g["creator_email"] = row["creator_email"].as<std::string>();
     } catch (...) {}
+    try {
+        if (!row["activity_name"].isNull()) g["activity_name"] = row["activity_name"].as<std::string>();
+        else g["activity_name"] = "";
+    } catch (...) {
+        g["activity_name"] = "";
+    }
+    try {
+        if (!row["activity_id"].isNull()) g["activity_id"] = std::to_string(row["activity_id"].as<int>());
+        else g["activity_id"] = "";
+    } catch (...) {
+        g["activity_id"] = "";
+    }
 
     Json::Value mArr(Json::arrayValue);
     for (const auto& m : memberIds) {
