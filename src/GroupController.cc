@@ -55,7 +55,7 @@ void GroupController::createGroup(const drogon::HttpRequestPtr& req,
             resp->setStatusCode(drogon::k500InternalServerError);
             callback(resp);
         },
-        name, purpose, currentUserId, maxCapacity
+        name, purpose, currentUserId, maxCapacity, section
     );
 }
 
