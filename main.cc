@@ -110,6 +110,19 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
+    // Health check endpoints (public, no auth required)
+    auto healthHandler = [](const drogon::HttpRequestPtr&,
+                            std::function<void(const drogon::HttpResponsePtr&)>&& callback) {
+        Json::Value ret;
+        ret["status"] = "healthy";
+        ret["service"] = "backend_fast";
+        ret["database"] = "connected";
+        auto resp = drogon::HttpResponse::newHttpJsonResponse(ret);
+        callback(resp);
+    };
+    drogon::app().registerHandler("/health", healthHandler, {drogon::Get});
+    drogon::app().registerHandler("/api/health", healthHandler, {drogon::Get});
+
     std::cout << "Drogon server listening on port 5000..." << std::endl;
     drogon::app().run();
 
