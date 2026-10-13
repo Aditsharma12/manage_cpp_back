@@ -176,6 +176,63 @@ void AuthController::login(const drogon::HttpRequestPtr& req,
     );
 }
 
+void AuthController::getProfile(const drogon::HttpRequestPtr& req,
+                                std::function<void(const drogon::HttpResponsePtr&)>&& callback) {
+    std::string userIdStr = req->getAttributes()->get<std::string>("user_id");
+    int userId = 0;
+    try {
+        userId = std::stoi(userIdStr);
+    } catch (...) {
+        Json::Value err;
+        err["error"] = "Invalid user ID";
+        auto resp = drogon::HttpResponse::newHttpJsonResponse(err);
+        resp->setStatusCode(drogon::k400BadRequest);
+        callback(resp);
+        return;
+    }
+
+    auto dbClient = DbService::getClient();
+    dbClient->execSqlAsync(
+        "SELECT * FROM users WHERE id = $1",
+        [callback, dbClient, userId](const drogon::orm::Result& r) {
+            if (r.size() == 0) {
+                Json::Value err;
+                err["error"] = "User not found";
+                auto resp = drogon::HttpResponse::newHttpJsonResponse(err);
+                resp->setStatusCode(drogon::k404NotFound);
+                callback(resp);
+                return;
+            }
+
+            auto userRow = r[0];
+            dbClient->execSqlAsync(
+                "SELECT group_id FROM group_members WHERE user_id = $1",
+                [callback, userRow](const drogon::orm::Result& gr) {
+                    std::vector<std::string> groupIds;
+                    for (const auto& row : gr) {
+                        groupIds.push_back(std::to_string(row["group_id"].as<int>()));
+                    }
+                    auto resp = drogon::HttpResponse::newHttpJsonResponse(DbService::formatUser(userRow, groupIds));
+                    callback(resp);
+                },
+                [callback, userRow](const drogon::orm::DrogonDbException&) {
+                    auto resp = drogon::HttpResponse::newHttpJsonResponse(DbService::formatUser(userRow));
+                    callback(resp);
+                },
+                userId
+            );
+        },
+        [callback](const drogon::orm::DrogonDbException& e) {
+            Json::Value err;
+            err["error"] = e.base().what();
+            auto resp = drogon::HttpResponse::newHttpJsonResponse(err);
+            resp->setStatusCode(drogon::k500InternalServerError);
+            callback(resp);
+        },
+        userId
+    );
+}
+
 void AuthController::updateProfile(const drogon::HttpRequestPtr& req,
                                   std::function<void(const drogon::HttpResponsePtr&)>&& callback) {
     std::string userIdStr = req->getAttributes()->get<std::string>("user_id");
