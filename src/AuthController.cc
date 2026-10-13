@@ -378,20 +378,50 @@ void AuthController::adminDeleteUser(const drogon::HttpRequestPtr& req,
 
     auto dbClient = DbService::getClient();
     dbClient->execSqlAsync(
-        "DELETE FROM users WHERE id = $1 RETURNING id",
-        [callback](const drogon::orm::Result& r) {
+        "SELECT role FROM users WHERE id = $1",
+        [callback, dbClient, userId](const drogon::orm::Result& r) {
             if (r.size() == 0) {
                 Json::Value err;
-                err["error"] = "Student not found";
+                err["error"] = "User not found";
                 auto resp = drogon::HttpResponse::newHttpJsonResponse(err);
                 resp->setStatusCode(drogon::k404NotFound);
                 callback(resp);
                 return;
             }
-            Json::Value res;
-            res["message"] = "Student deleted successfully";
-            auto resp = drogon::HttpResponse::newHttpJsonResponse(res);
-            callback(resp);
+            std::string role = r[0]["role"].isNull() ? "student" : r[0]["role"].as<std::string>();
+            if (role == "admin") {
+                Json::Value err;
+                err["error"] = "Admin accounts are protected and cannot be removed";
+                auto resp = drogon::HttpResponse::newHttpJsonResponse(err);
+                resp->setStatusCode(drogon::k403Forbidden);
+                callback(resp);
+                return;
+            }
+            dbClient->execSqlAsync(
+                "DELETE FROM users WHERE id = $1 RETURNING id",
+                [callback](const drogon::orm::Result& r) {
+                    if (r.size() == 0) {
+                        Json::Value err;
+                        err["error"] = "Student not found";
+                        auto resp = drogon::HttpResponse::newHttpJsonResponse(err);
+                        resp->setStatusCode(drogon::k404NotFound);
+                        callback(resp);
+                        return;
+                    }
+                    Json::Value res;
+                    res["message"] = "Student deleted successfully";
+                    auto resp = drogon::HttpResponse::newHttpJsonResponse(res);
+                    callback(resp);
+                },
+                [callback](const drogon::orm::DrogonDbException& e) {
+                    Json::Value err;
+                    err["error"] = e.base().what();
+                    auto resp = drogon::HttpResponse::newHttpJsonResponse(err);
+                    resp->setStatusCode(drogon::k500InternalServerError);
+                    callback(resp);
+                },
+                userId
+            );
         },
         [callback](const drogon::orm::DrogonDbException& e) {
             Json::Value err;
