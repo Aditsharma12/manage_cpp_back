@@ -1,0 +1,22 @@
+# Build directories
+build/
+bin/
+*.o
+*.obj
+*.exe
+backend_fast
+
+# IDE / Editor
+.vscode/
+.idea/
+*.swp
+*.user
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Environment files
+.env
+.env.*
+!.env.example
