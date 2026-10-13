@@ -35,6 +35,13 @@ Json::Value DbService::formatUser(const drogon::orm::Row& row, const std::vector
     u["phone_number"] = row["phone_number"].isNull() ? "" : row["phone_number"].as<std::string>();
     u["about"] = row["about"].isNull() ? "" : row["about"].as<std::string>();
 
+    try {
+        if (!row["role"].isNull()) u["role"] = row["role"].as<std::string>();
+        else u["role"] = "student";
+    } catch (...) {
+        u["role"] = "student";
+    }
+
     if (!row["last_login"].isNull()) {
         try {
             u["last_login"] = row["last_login"].as<std::string>();
@@ -59,6 +66,13 @@ Json::Value DbService::formatGroup(const drogon::orm::Row& row, const std::vecto
     g["purpose"] = row["purpose"].isNull() ? "" : row["purpose"].as<std::string>();
     g["creator_id"] = std::to_string(row["creator_id"].as<int>());
     g["max_capacity"] = row["max_capacity"].as<int>();
+
+    try {
+        if (!row["section"].isNull()) g["section"] = row["section"].as<std::string>();
+        else g["section"] = "General";
+    } catch (...) {
+        g["section"] = "General";
+    }
 
     try {
         if (!row["creator_name"].isNull()) g["creator_name"] = row["creator_name"].as<std::string>();

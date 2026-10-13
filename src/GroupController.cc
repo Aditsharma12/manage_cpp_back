@@ -19,11 +19,12 @@ void GroupController::createGroup(const drogon::HttpRequestPtr& req,
 
     std::string name = json.get("name", "").asString();
     std::string purpose = json.get("purpose", "").asString();
-    int maxCapacity = json.get("max_capacity", 10).asInt();
+    std::string section = json.get("section", "General").asString();
+    int maxCapacity = json.get("max_capacity", 5).asInt();
 
     auto dbClient = DbService::getClient();
     dbClient->execSqlAsync(
-        "INSERT INTO groups (name, purpose, creator_id, max_capacity) VALUES ($1, $2, $3, $4) RETURNING *",
+        "INSERT INTO groups (name, purpose, creator_id, max_capacity, section) VALUES ($1, $2, $3, $4, $5) RETURNING *",
         [callback, dbClient, currentUserId, currentUserIdStr](const drogon::orm::Result& r) {
             auto groupRow = r[0];
             int groupId = groupRow["id"].as<int>();

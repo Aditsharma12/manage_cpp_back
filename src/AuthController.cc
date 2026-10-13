@@ -30,11 +30,27 @@ void AuthController::registerUser(const drogon::HttpRequestPtr& req,
     std::string roll = json.get("roll_number", "").asString();
     std::string password = json.get("password", "").asString();
     std::string passwordHash = security::hashPassword(password);
+    std::string role = json.get("role", "student").asString();
+    if (role != "admin" && role != "student") {
+        role = "student";
+    }
+
+    if (role == "admin") {
+        std::string secret = json.get("admin_secret", "").asString();
+        if (secret != "ADMIN2026") {
+            Json::Value err;
+            err["error"] = "Invalid Admin secret passcode (Default: ADMIN2026)";
+            auto resp = drogon::HttpResponse::newHttpJsonResponse(err);
+            resp->setStatusCode(drogon::k400BadRequest);
+            callback(resp);
+            return;
+        }
+    }
 
     auto dbClient = DbService::getClient();
     dbClient->execSqlAsync(
         "SELECT id FROM users WHERE email = $1",
-        [callback, dbClient, name, roll, email, phoneNumber, passwordHash](const drogon::orm::Result& r) {
+        [callback, dbClient, name, roll, email, phoneNumber, passwordHash, role](const drogon::orm::Result& r) {
             if (r.size() > 0) {
                 Json::Value err;
                 err["error"] = "Email already exists";
@@ -45,8 +61,8 @@ void AuthController::registerUser(const drogon::HttpRequestPtr& req,
             }
 
             dbClient->execSqlAsync(
-                "INSERT INTO users (name, roll_number, email, phone_number, password_hash, about) "
-                "VALUES ($1, $2, $3, $4, $5, 'Hey there! I am using Class Manager.') RETURNING id",
+                "INSERT INTO users (name, roll_number, email, phone_number, password_hash, about, role) "
+                "VALUES ($1, $2, $3, $4, $5, 'Hey there! I am using Class Manager.', $6) RETURNING id",
                 [callback](const drogon::orm::Result& insertResult) {
                     int newId = insertResult[0]["id"].as<int>();
                     Json::Value res;
@@ -63,7 +79,7 @@ void AuthController::registerUser(const drogon::HttpRequestPtr& req,
                     resp->setStatusCode(drogon::k500InternalServerError);
                     callback(resp);
                 },
-                name, roll, email, phoneNumber, passwordHash
+                name, roll, email, phoneNumber, passwordHash, role
             );
         },
         [callback](const drogon::orm::DrogonDbException& e) {
@@ -292,5 +308,98 @@ void AuthController::updateProfile(const drogon::HttpRequestPtr& req,
             callback(resp);
         },
         name, roll, phone, about, userId
+    );
+}
+
+void AuthController::adminAddUser(const drogon::HttpRequestPtr& req,
+                                  std::function<void(const drogon::HttpResponsePtr&)>&& callback) {
+    Json::Value json;
+    if (!DbService::parseJsonBody(req, json)) {
+        Json::Value err;
+        err["error"] = "Invalid JSON body";
+        auto resp = drogon::HttpResponse::newHttpJsonResponse(err);
+        resp->setStatusCode(drogon::k400BadRequest);
+        callback(resp);
+        return;
+    }
+
+    std::string email = json.get("email", "").asString();
+    std::string name = json.get("name", "").asString();
+    std::string roll = json.get("roll_number", "").asString();
+    std::string phone = json.get("phone_number", "N/A").asString();
+    std::string role = json.get("role", "student").asString();
+    std::string password = json.get("password", "password123").asString();
+    std::string passwordHash = security::hashPassword(password);
+
+    if (email.empty() || name.empty()) {
+        Json::Value err;
+        err["error"] = "Name and email are required";
+        auto resp = drogon::HttpResponse::newHttpJsonResponse(err);
+        resp->setStatusCode(drogon::k400BadRequest);
+        callback(resp);
+        return;
+    }
+
+    auto dbClient = DbService::getClient();
+    dbClient->execSqlAsync(
+        "INSERT INTO users (name, roll_number, email, phone_number, password_hash, about, role) "
+        "VALUES ($1, $2, $3, $4, $5, 'Student record added by administrator.', $6) RETURNING *",
+        [callback](const drogon::orm::Result& r) {
+            auto resp = drogon::HttpResponse::newHttpJsonResponse(DbService::formatUser(r[0]));
+            resp->setStatusCode(drogon::k201Created);
+            callback(resp);
+        },
+        [callback](const drogon::orm::DrogonDbException& e) {
+            Json::Value err;
+            err["error"] = e.base().what();
+            auto resp = drogon::HttpResponse::newHttpJsonResponse(err);
+            resp->setStatusCode(drogon::k400BadRequest);
+            callback(resp);
+        },
+        name, roll, email, phone, passwordHash, role
+    );
+}
+
+void AuthController::adminDeleteUser(const drogon::HttpRequestPtr& req,
+                                     std::function<void(const drogon::HttpResponsePtr&)>&& callback,
+                                     const std::string& userIdStr) {
+    (void)req;
+    int userId = 0;
+    try {
+        userId = std::stoi(userIdStr);
+    } catch (...) {
+        Json::Value err;
+        err["error"] = "Invalid user ID";
+        auto resp = drogon::HttpResponse::newHttpJsonResponse(err);
+        resp->setStatusCode(drogon::k400BadRequest);
+        callback(resp);
+        return;
+    }
+
+    auto dbClient = DbService::getClient();
+    dbClient->execSqlAsync(
+        "DELETE FROM users WHERE id = $1 RETURNING id",
+        [callback](const drogon::orm::Result& r) {
+            if (r.size() == 0) {
+                Json::Value err;
+                err["error"] = "Student not found";
+                auto resp = drogon::HttpResponse::newHttpJsonResponse(err);
+                resp->setStatusCode(drogon::k404NotFound);
+                callback(resp);
+                return;
+            }
+            Json::Value res;
+            res["message"] = "Student deleted successfully";
+            auto resp = drogon::HttpResponse::newHttpJsonResponse(res);
+            callback(resp);
+        },
+        [callback](const drogon::orm::DrogonDbException& e) {
+            Json::Value err;
+            err["error"] = e.base().what();
+            auto resp = drogon::HttpResponse::newHttpJsonResponse(err);
+            resp->setStatusCode(drogon::k500InternalServerError);
+            callback(resp);
+        },
+        userId
     );
 }
